@@ -1,1 +1,2 @@
-// Reexport your entry components here
+import ZoomableCircles from './ZoomableCircles.svelte';
+export default ZoomableCircles;
