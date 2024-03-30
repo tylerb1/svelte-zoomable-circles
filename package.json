@@ -1,6 +1,15 @@
 {
 	"name": "svelte-zoomable-circles",
 	"version": "0.0.1",
+	"license": "MIT",
+	"keywords": [
+		"svelte",
+		"zoom",
+		"circle",
+		"d3",
+		"dataviz",
+		"component"
+	],
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run package",
