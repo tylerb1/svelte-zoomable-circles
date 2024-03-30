@@ -4,38 +4,9 @@
   import { transition } from 'd3-transition'
   import { scaleLinear } from 'd3-scale'
 	import { onMount } from 'svelte';
+  import { sampleTree } from './sampleTree.js';
 
-  // Tree & UI state
-  export let tree = {
-    name: "root",
-    children: [
-      {
-        name: "child1",
-        children: [
-          {
-            name: "child1.1",
-            value: 1000
-          },
-          {
-            name: "child1.2",
-            value: 500
-          },
-          {
-            name: "child1.3",
-            value: 250
-          },
-        ]
-      },
-      {
-        name: "child2",
-        value: 500
-      },
-      {
-        name: "child3",
-        value: 250
-      },
-    ]
-  }
+  export let tree = sampleTree
   export let svgWidth = 300
   export let svgHeight = 300
   export let startColor = '#555'
@@ -43,7 +14,10 @@
   export let textFillColor = '#000'
   export let circleHoverStrokeColor = '#000'
   export let circleHoverStrokeWidth = 3
-  export let textFontSize = 20
+  export let textFontSize = 25
+  export let padding = 100
+  export let zoomDurationMs = 500
+  let currentNode = { name: tree.name, path: [tree.name], value: null }
   let innerWidth
   let innerHeight
   let root
@@ -53,11 +27,10 @@
   let activeZoomB
   let activeZoomK
   let packFunc
-  let clickedObjectType = "branch"
-  let currentNode
+  let longestPathLength
+  let color
 
   $: {
-    // Rerender SVG on screen width change
     if (innerWidth) {
       if (innerWidth < innerHeight) {
         innerHeight = innerWidth;
@@ -67,25 +40,24 @@
       svgWidth = innerWidth;
       svgHeight = innerHeight;
       setPackFunc()
-      resetRoot()
-      returnToCurrentNode()
+      root = packFunc(tree)
+      clickedCategory(currentNode.name)
     }
+  }
+
+  $: if (longestPathLength) {
+    color = scaleLinear()
+      .domain([0, longestPathLength])
+      .range([startColor, endColor])
+      .interpolate(interpolateHcl);
   }
 
   onMount(async () => {
-    currentNode = { name: tree.name, path: [tree.name], value: null }
+    longestPathLength = findLongestPath(tree);
     setPackFunc()
-    resetRoot()
+    root = packFunc(tree)
     resetActiveFocus()
   })
-
-  /* UTILITY FUNCTIONS */
-
-  const resetRoot = () => {
-    if (tree) {
-      root = packFunc(tree)
-    }
-  }
 
   const getPath = (data) => {
     let path = [data.data.name];
@@ -97,24 +69,29 @@
     return path;
   }
 
+  const findLongestPath = (node, currentPathLength = 0) => {
+    if (node.value !== undefined) {
+      return currentPathLength;
+    }
+    let longestPath = 0;
+    if (node.children) {
+      for (const child of node.children) {
+        const pathLength = findLongestPath(child, currentPathLength + 1);
+        longestPath = Math.max(longestPath, pathLength);
+      }
+    }
+    return longestPath;
+  }
+
   const setPackFunc = () => {
     packFunc = (data) => pack()
       .size([svgWidth, svgHeight])
-      .radius((d) => !d.value ? 5 : d.value / 200)
-      .padding(4)
+      .radius((d) => d.value)
+      .padding(padding)
       (hierarchy(data)
         .sum(d => d.value)
         .sort((a, b) => b.value - a.value));
   }
-
-  const returnToCurrentNode = () => {
-    clickedCategory(currentNode?.name)
-  }
-
-  const color = scaleLinear()
-    .domain([0, 5])
-    .range([startColor, endColor])
-    .interpolate(interpolateHcl);
 
   const inactiveZoomTo = (v) => {
     activeZoomK = svgWidth / v[2];
@@ -137,7 +114,7 @@
     }
     activeFocus = d;
     transition()
-      .duration(750)
+      .duration(zoomDurationMs)
       .tween('zoom', () => {
         var i = interpolateZoom(
           view, 
@@ -162,17 +139,14 @@
   }
 
   const clickedCategory = (name, e) => {
-    const rootData = root?.descendants()?.find((d) => d.data.name === name);
-    if (rootData) {
-      const path = getPath(rootData)
-      zoom(rootData, e);
-      clickedObjectType = 'value' in rootData.data ? 'leaf' : 'branch'
-      currentNode = {
-        name,
-        path,
-        value: rootData.data.value || null
-      }
+    const rootData = root.descendants().find((d) => d.data.name === name);
+    const path = getPath(rootData)
+    currentNode = {
+      name,
+      path,
+      value: rootData.data.value || null
     }
+    zoom(rootData, e);
   }
 </script>
 
@@ -188,62 +162,48 @@
     height={svgHeight}
     width={svgWidth}
     style="background: {endColor};" 
-    role="button"
-    tabindex="0"
     on:click={(e) => {
       zoom(root, e)
-      clickedObjectType = "branch"
       currentNode = { name: tree.name, path: [tree.name], value: null }
     }}
+    role="button"
+    tabindex="-2"
     on:keydown={() => {}}
   >
     <g transform="translate({svgWidth / 2},{svgHeight / 2})">
       {#each root.descendants().slice(1) as rootData}
         <circle
-          style="
-            cursor: pointer;
-            {rootData.parent 
-              ? rootData.data.children
-                ? '' 
-                : `fill: ${startColor};` 
-              : 'pointer-events: none;'
-            }
-          "
-          role="button"
-          tabindex="-1"
-          fill={rootData.data.children ? color(rootData.depth) : 'null'} 
+          style="cursor: pointer;"
+          fill={rootData.data.children ? color(rootData.depth) : startColor} 
           transform="translate({(rootData.x - activeZoomA) * activeZoomK},{(rootData.y - activeZoomB) * activeZoomK})"
           r={rootData.r * activeZoomK}
           onmouseover="evt.target.setAttribute('stroke-width', '{circleHoverStrokeWidth}'); evt.target.setAttribute('stroke', '{circleHoverStrokeColor}');"
           onmouseout="evt.target.setAttribute('stroke-width', '0'); evt.target.setAttribute('stroke', 'transparent');"
           on:click={(e) => clickedCircle(e, rootData)}
+          role="button"
+          tabindex="-1"
           on:keydown={() => {}}
         ></circle>
       {/each}
       {#each root.descendants() as rootDes}
         <text 
           font-size="{textFontSize}px"
+          transform="translate({(rootDes.x - activeZoomA) * activeZoomK},{(rootDes.y - activeZoomB) * activeZoomK})"
           style="
             pointer-events: none; 
             text-anchor: middle;
+            dominant-baseline: central;
             fill: {textFillColor};
-            fill-opacity: {
-              rootDes.parent === activeFocus || (
-                currentNode && 
-                currentNode.name === rootDes?.data?.name &&
-                !!currentNode.value
-              ) ? 1 : 0}; 
             display: {
               rootDes.parent === activeFocus || (
                 currentNode && 
-                currentNode.name === rootDes?.data?.name &&
+                currentNode.name === rootDes.data.name &&
                 !!currentNode.value
               ) ? "inline" : "none"
             };
           "
-          transform="translate({(rootDes.x - activeZoomA) * activeZoomK},{(rootDes.y - activeZoomB) * activeZoomK})"
         >
-          {rootDes?.data?.name}
+          {rootDes.data.name}
         </text>
       {/each}
     </g>
