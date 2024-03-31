@@ -1,6 +1,6 @@
 # svelte-zoomable-circles
 
-A zoomable circle component for displaying and browsing hierarchical data
+A [Svelte.js](https://svelte.dev/) component for displaying and browsing hierarchical data using zoomable circles
 
 Built with Svelte and D3.js
 
