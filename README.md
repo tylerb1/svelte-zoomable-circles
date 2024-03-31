@@ -8,7 +8,7 @@ Built with Svelte and D3.js
 
 ![demo](https://i.imgur.com/Yi82D5L.gif)
 
-Live demo: [openopensource.com](https://github.com/tylerb1) 
+Live demo: [openopensource.com](https://openopensource.com) 
 
 # usage
 
